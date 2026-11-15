@@ -15,7 +15,24 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip clang lld llvm pahole
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip git
+          sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5 || true
+          sudo ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5 || true
+
+      - name: Fetch exact Google Clang r450784e (14.0.7)
+        run: |
+          for br in android13-release android13-qpr3-release android13-qpr1-release main; do
+            if git clone --depth=1 --filter=blob:none --sparse -b "$br" https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 clang-prebuilt 2>/dev/null; then
+              (cd clang-prebuilt && git sparse-checkout set clang-r450784e)
+              if [ -x clang-prebuilt/clang-r450784e/bin/clang ]; then
+                echo "Fetched clang-r450784e from $br"
+                break
+              fi
+              rm -rf clang-prebuilt
+            fi
+          done
+          test -x clang-prebuilt/clang-r450784e/bin/clang
+          clang-prebuilt/clang-r450784e/bin/clang --version
 
       - name: Fetch AOSP GKI android13-5.15 branch
         run: |
@@ -23,17 +40,19 @@ jobs:
 
       - name: Prepare kernel config and KMI symbol CRCs
         run: |
+          export PATH="$PWD/clang-prebuilt/clang-r450784e/bin:$PATH"
           cd kernel
           sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 178/' Makefile
           touch .scmversion
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
-          ./scripts/config --disable LOCALVERSION_AUTO --enable MODVERSIONS --enable LTO_CLANG_THIN --disable DEBUG_INFO_BTF --disable MODULE_SIG --disable MODULE_SIG_ALL --disable WERROR --set-str LOCALVERSION "-android13-8-gb00609b259a5"
+          ./scripts/config --disable LOCALVERSION_AUTO --enable MODVERSIONS --enable LTO_CLANG_THIN --enable CFI_CLANG --disable CFI_PERMISSIVE --disable DEBUG_INFO_BTF --disable MODULE_SIG --disable MODULE_SIG_ALL --disable WERROR --set-str LOCALVERSION "-android13-8-gb00609b259a5"
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
           make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 KCFLAGS="-Wno-error" vmlinux modules_prepare
           cp -f vmlinux.symvers Module.symvers
 
       - name: Build fuxi_unblank_bypass.ko & package KernelSU ZIP
         run: |
+          export PATH="$PWD/clang-prebuilt/clang-r450784e/bin:$PATH"
           make -C kernel M=$PWD ARCH=arm64 LLVM=1 LLVM_IAS=1 KCFLAGS="-Wno-error" modules
           modinfo fuxi_unblank_bypass.ko
           mkdir -p ksu_module
