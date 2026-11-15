@@ -15,7 +15,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip clang lld llvm
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip clang lld llvm pahole
 
       - name: Fetch AOSP GKI android13-5.15 branch
         run: |
@@ -27,7 +27,7 @@ jobs:
           sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 178/' Makefile
           touch .scmversion
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
-          ./scripts/config --disable LOCALVERSION_AUTO --enable MODVERSIONS --enable LTO_CLANG_THIN --disable MODULE_SIG --disable MODULE_SIG_ALL --disable WERROR --set-str LOCALVERSION "-android13-8-gb00609b259a5"
+          ./scripts/config --disable LOCALVERSION_AUTO --enable MODVERSIONS --enable LTO_CLANG_THIN --disable DEBUG_INFO_BTF --disable MODULE_SIG --disable MODULE_SIG_ALL --disable WERROR --set-str LOCALVERSION "-android13-8-gb00609b259a5"
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
           make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 KCFLAGS="-Wno-error" vmlinux modules_prepare
           cp -f vmlinux.symvers Module.symvers
