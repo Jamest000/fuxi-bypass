@@ -1,3 +1,14 @@
+#include <linux/uaccess.h>
+#define copy_to_kernel_nofault(dst, src, sz) ({ \
+	long __ret = -EFAULT; \
+	char __tmp[64]; \
+	if ((sz) <= sizeof(__tmp) && copy_from_kernel_nofault(__tmp, (dst), (sz)) == 0) { \
+		memcpy((dst), (src), (sz)); \
+		__ret = 0; \
+	} \
+	__ret; \
+})
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/kprobes.h>
