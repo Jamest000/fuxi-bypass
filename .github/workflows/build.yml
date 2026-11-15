@@ -15,7 +15,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev make python3 zip cpio pahole
+          sudo apt-get install -y bc bison flex libssl-dev make python3 zip cpio pahole curl tar
 
       - name: Download Android Clang r450784e (14.0.7)
         run: |
@@ -26,16 +26,20 @@ jobs:
       - name: Fetch AOSP GKI kernel commit b00609b259a5
         run: |
           mkdir -p kernel && cd kernel
-          git init
-          git remote add origin https://android.googlesource.com/kernel/common
-          git fetch --depth=1 origin b00609b259a5
-          git checkout FETCH_HEAD
+          if curl -fL "https://android.googlesource.com/kernel/common/+archive/b00609b259a5.tar.gz" -o ../kernel.tar.gz; then
+            tar -xzf ../kernel.tar.gz
+            rm -f ../kernel.tar.gz
+          else
+            cd .. && rm -rf kernel
+            git clone --branch android13-5.15 --single-branch https://android.googlesource.com/kernel/common kernel
+            cd kernel && git checkout b00609b259a5
+          fi
 
       - name: Prepare kernel config and symbol CRCs
         run: |
           cd kernel
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
-          ./scripts/config --disable LOCALVERSION_AUTO --set-str LOCALVERSION "-android13-8-gb00609b259a5"
+          ./scripts/config --disable LOCALVERSION_AUTO --disable TRIM_UNUSED_KSYMS --disable LTO_CLANG_FULL --enable LTO_CLANG_THIN --set-str LOCALVERSION "-android13-8-gb00609b259a5"
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
           make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 vmlinux modules_prepare
           cp -f vmlinux.symvers Module.symvers
@@ -56,4 +60,3 @@ jobs:
           path: |
             fuxi_unblank_bypass.ko
             fuxi_bq_bypass_v2.zip
-            
