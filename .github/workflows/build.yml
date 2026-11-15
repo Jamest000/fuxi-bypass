@@ -21,22 +21,24 @@ jobs:
         run: |
           git clone --depth=1 -b android13-5.15 https://android.googlesource.com/kernel/common kernel
 
-      - name: Prepare kernel headers
+      - name: Prepare kernel config and KMI symbol CRCs
         run: |
           cd kernel
           sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 178/' Makefile
+          touch .scmversion
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
-          ./scripts/config --disable LOCALVERSION_AUTO --disable MODVERSIONS --disable MODULE_SIG --disable MODULE_SIG_ALL --disable WERROR --disable LTO_CLANG_FULL --disable LTO_CLANG_THIN --set-str LOCALVERSION "-android13-8-gb00609b259a5"
+          ./scripts/config --disable LOCALVERSION_AUTO --enable MODVERSIONS --enable LTO_CLANG_THIN --disable MODULE_SIG --disable MODULE_SIG_ALL --disable WERROR --set-str LOCALVERSION "-android13-8-gb00609b259a5"
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
-          make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 modules_prepare
+          make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 KCFLAGS="-Wno-error" vmlinux modules_prepare
+          cp -f vmlinux.symvers Module.symvers
 
       - name: Build fuxi_unblank_bypass.ko & package KernelSU ZIP
         run: |
-          make -C kernel M=$PWD ARCH=arm64 LLVM=1 LLVM_IAS=1 modules
+          make -C kernel M=$PWD ARCH=arm64 LLVM=1 LLVM_IAS=1 KCFLAGS="-Wno-error" modules
           modinfo fuxi_unblank_bypass.ko
           mkdir -p ksu_module
           cp -f fuxi_unblank_bypass.ko service.sh module.prop ksu_module/
-          sed -i 's#insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null#/data/adb/ksu/bin/busybox insmod -f "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null || insmod -f "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null#' ksu_module/service.sh
+          sed -i 's#insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null#insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null || /data/adb/ksu/bin/busybox insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null#' ksu_module/service.sh
           chmod 0755 ksu_module/service.sh
           cd ksu_module && zip -r ../fuxi_bq_bypass_v2.zip .
 
