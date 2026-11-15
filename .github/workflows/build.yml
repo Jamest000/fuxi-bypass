@@ -19,9 +19,17 @@ jobs:
 
       - name: Download Android Clang r450784e (14.0.7)
         run: |
-          git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b android13-release clang_repo
-          cd clang_repo && git sparse-checkout set clang-r450784e
-          echo "$PWD/clang-r450784e/bin" >> $GITHUB_PATH
+          git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b android13-qpr3-release clang_repo || true
+          (cd clang_repo && git sparse-checkout set clang-r450784e) || true
+          if [ ! -x "$PWD/clang_repo/clang-r450784e/bin/clang" ]; then
+            sudo apt-get install -y clang-14 lld-14 llvm-14
+            mkdir -p "$PWD/clang_repo/clang-r450784e/bin"
+            for t in clang clang++ ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
+              ln -sf "/usr/bin/${t}-14" "$PWD/clang_repo/clang-r450784e/bin/$t"
+            done
+          fi
+          "$PWD/clang_repo/clang-r450784e/bin/clang" --version
+          echo "$PWD/clang_repo/clang-r450784e/bin" >> $GITHUB_PATH
 
       - name: Fetch AOSP GKI android13-5.15 branch
         run: |
@@ -32,7 +40,7 @@ jobs:
           cd kernel
           sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 178/' Makefile
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
-          ./scripts/config --disable LOCALVERSION_AUTO --disable TRIM_UNUSED_KSYMS --disable LTO_CLANG_FULL --enable LTO_CLANG_THIN --set-str LOCALVERSION "-android13-8-gb00609b259a5"
+          ./scripts/config --disable LOCALVERSION_AUTO --disable TRIM_UNUSED_KSYMS --disable LTO_CLANG_FULL --disable LTO_CLANG_THIN --set-str LOCALVERSION "-android13-8-gb00609b259a5"
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
           make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 vmlinux modules_prepare
           cp -f vmlinux.symvers Module.symvers
