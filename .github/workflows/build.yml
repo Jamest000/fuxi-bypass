@@ -15,43 +15,28 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip cpio pahole
-
-      - name: Download Android Clang r450784e (14.0.7)
-        run: |
-          git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b android13-qpr3-release clang_repo || true
-          (cd clang_repo && git sparse-checkout set clang-r450784e) || true
-          if [ ! -x "$PWD/clang_repo/clang-r450784e/bin/clang" ]; then
-            sudo apt-get install -y clang-14 lld-14 llvm-14
-            mkdir -p "$PWD/clang_repo/clang-r450784e/bin"
-            for t in clang clang++ ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
-              ln -sf "/usr/bin/${t}-14" "$PWD/clang_repo/clang-r450784e/bin/$t"
-            done
-          fi
-          "$PWD/clang_repo/clang-r450784e/bin/clang" --version
-          echo "$PWD/clang_repo/clang-r450784e/bin" >> $GITHUB_PATH
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip clang lld llvm
 
       - name: Fetch AOSP GKI android13-5.15 branch
         run: |
           git clone --depth=1 -b android13-5.15 https://android.googlesource.com/kernel/common kernel
 
-      - name: Prepare kernel config and symbol CRCs
+      - name: Prepare kernel headers
         run: |
           cd kernel
           sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 178/' Makefile
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
-          ./scripts/config --disable LOCALVERSION_AUTO --disable TRIM_UNUSED_KSYMS --disable LTO_CLANG_FULL --disable LTO_CLANG_THIN --set-str LOCALVERSION "-android13-8-gb00609b259a5"
+          ./scripts/config --disable LOCALVERSION_AUTO --disable MODVERSIONS --disable MODULE_SIG --disable MODULE_SIG_ALL --disable WERROR --disable LTO_CLANG_FULL --disable LTO_CLANG_THIN --set-str LOCALVERSION "-android13-8-gb00609b259a5"
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
-          make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 vmlinux modules_prepare
-          cp -f vmlinux.symvers Module.symvers
+          make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 modules_prepare
 
       - name: Build fuxi_unblank_bypass.ko & package KernelSU ZIP
         run: |
-          make KDIR=$PWD/kernel
+          make -C kernel M=$PWD ARCH=arm64 LLVM=1 LLVM_IAS=1 modules
           modinfo fuxi_unblank_bypass.ko
           mkdir -p ksu_module
           cp -f fuxi_unblank_bypass.ko service.sh module.prop ksu_module/
-          sed -i 's|insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null|insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null \|\| /data/adb/ksu/bin/busybox insmod -f "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null|' ksu_module/service.sh
+          sed -i 's#insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null#/data/adb/ksu/bin/busybox insmod -f "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null || insmod -f "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null#' ksu_module/service.sh
           chmod 0755 ksu_module/service.sh
           cd ksu_module && zip -r ../fuxi_bq_bypass_v2.zip .
 
