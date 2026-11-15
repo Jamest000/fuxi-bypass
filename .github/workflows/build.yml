@@ -23,15 +23,14 @@ jobs:
           cd clang_repo && git sparse-checkout set clang-r450784e
           echo "$PWD/clang-r450784e/bin" >> $GITHUB_PATH
 
-      - name: Fetch AOSP GKI kernel commit b00609b259a5
+      - name: Fetch AOSP GKI android13-5.15 branch
         run: |
-          git clone --filter=blob:none --no-checkout https://android.googlesource.com/kernel/common kernel
-          cd kernel
-          git checkout b00609b259a5
+          git clone --depth=1 -b android13-5.15 https://android.googlesource.com/kernel/common kernel
 
       - name: Prepare kernel config and symbol CRCs
         run: |
           cd kernel
+          sed -i 's/^SUBLEVEL = .*/SUBLEVEL = 178/' Makefile
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
           ./scripts/config --disable LOCALVERSION_AUTO --disable TRIM_UNUSED_KSYMS --disable LTO_CLANG_FULL --enable LTO_CLANG_THIN --set-str LOCALVERSION "-android13-8-gb00609b259a5"
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
@@ -44,6 +43,7 @@ jobs:
           modinfo fuxi_unblank_bypass.ko
           mkdir -p ksu_module
           cp -f fuxi_unblank_bypass.ko service.sh module.prop ksu_module/
+          sed -i 's|insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null|insmod "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null \|\| /data/adb/ksu/bin/busybox insmod -f "$MODDIR/fuxi_unblank_bypass.ko" 2>/dev/null|' ksu_module/service.sh
           chmod 0755 ksu_module/service.sh
           cd ksu_module && zip -r ../fuxi_bq_bypass_v2.zip .
 
