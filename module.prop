@@ -1,0 +1,6 @@
+id=fuxi_bq_bypass
+name=Fuxi Full-Speed Charge & Unblank Bypass
+version=v2.0
+versionCode=200
+author=fuxi_custom
+description=Bypass BqVoter aging limit, thermal limit, and screen-on 2.78A charging limit on Xiaomi 13 (5.15.178-android13-8-gb00609b259a5)
