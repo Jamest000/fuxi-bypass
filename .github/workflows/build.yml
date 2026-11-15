@@ -15,24 +15,38 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip git curl tar
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev make python3 zip git
           sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5 || true
           sudo ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5 || true
 
       - name: Fetch exact Google Clang r450784e (14.0.7)
         run: |
-          mkdir -p clang-prebuilt/clang-r450784e
-          REFS="refs/heads/android13-gsi refs/heads/android13-security-release refs/tags/android-13.0.0_r74 refs/tags/android-13.0.0_r41 refs/tags/android-13.0.0_r1"
-          for ref in $REFS; do
-            if curl -fsSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/${ref}/clang-r450784e.tar.gz" -o clang.tar.gz; then
-              tar -xzf clang.tar.gz -C clang-prebuilt/clang-r450784e
-              rm -f clang.tar.gz
+          REFS="android13-gsi android13-security-release android14-gsi android-13.0.0_r74 android-13.0.0_r41 android-13.0.0_r1"
+          for br in $REFS; do
+            echo "Trying $br..."
+            if git clone --depth=1 --filter=blob:none --no-checkout -b "$br" https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 clang-prebuilt 2>/dev/null; then
+              (cd clang-prebuilt && git sparse-checkout init --cone && git sparse-checkout set clang-r450784e && git checkout)
               if [ -x clang-prebuilt/clang-r450784e/bin/clang ]; then
-                echo "Downloaded clang-r450784e from $ref"
+                echo "SUCCESS: Fetched clang-r450784e from $br"
                 break
               fi
+              rm -rf clang-prebuilt
             fi
           done
+          if [ ! -x clang-prebuilt/clang-r450784e/bin/clang ]; then
+            EXTRA_REFS=$(git ls-remote --heads --tags https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 | awk '{print $2}' | grep -E 'android13|android-13' | grep -v '\^{}' | sed 's#refs/heads/##;s#refs/tags/##' | head -n 10)
+            for br in $EXTRA_REFS; do
+              echo "Trying discovered ref $br..."
+              if git clone --depth=1 --filter=blob:none --no-checkout -b "$br" https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 clang-prebuilt 2>/dev/null; then
+                (cd clang-prebuilt && git sparse-checkout init --cone && git sparse-checkout set clang-r450784e && git checkout)
+                if [ -x clang-prebuilt/clang-r450784e/bin/clang ]; then
+                  echo "SUCCESS: Fetched clang-r450784e from $br"
+                  break
+                fi
+                rm -rf clang-prebuilt
+              fi
+            done
+          fi
           test -x clang-prebuilt/clang-r450784e/bin/clang
           clang-prebuilt/clang-r450784e/bin/clang --version
 
